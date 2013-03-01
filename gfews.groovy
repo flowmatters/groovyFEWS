@@ -1,28 +1,21 @@
 #!/usr/bin/env groovy
-import com.google.common.io.Files
-import javax.xml.parsers.DocumentBuilderFactory
-import org.codehaus.groovy.tools.xml.DomToGroovy
-import org.codehaus.groovy.control.CompilationFailedException
 
 class gfews
 {
 	static int main(String[] args)
 	{
 		def cmdText =              (args.length>0)?args[0]:"unknown"
-		sourceDirectory =      (args.length>1)?args[1]:null
-		destinationDirectory = (args.length>2)?args[2]:null
+		Actions.sourceDirectory =      (args.length>1)?args[1]:null
+		Actions.destinationDirectory = (args.length>2)?args[2]:null
 		
 		def cmd = match(cmdText)
-		cmd(cmdText,sourceDirectory,destinationDirectory)
-		errorCount
+		cmd(cmdText,Actions.sourceDirectory,Actions.destinationDirectory)
+		Actions.compileErrors
 	}
 
-	static def sourceDirectory = ""
-	static def destinationDirectory = ""
 	static def dirCount = 0;
 	static def filesProcessed = 0
 	static def filesSkipped = 0
-	static def errorCount = 0
 	static def errorThreshold = 5
 	static def faillingFileModificationTimeStamps = [:]
 	
@@ -39,10 +32,6 @@ class gfews
 		def pair = commands.find{it.key.find("^$requestedCommand")}
 		
 		pair ? pair.key : "unknown"
-//		for(it in commands)
-//			if(it.key.find("^$requestedCommand"))
-//				return it.key
-//		"unknown"
 	}
 
 	static def match(requestedCommand)
@@ -50,7 +39,6 @@ class gfews
 		commands[matchCommandName(requestedCommand)]
 	}
 
-	static showDebug=false
 
 	static def skipFile(sourceFile, destinationFile)
 	{
@@ -66,17 +54,6 @@ class gfews
 	static def destinationUpToDate(sourceFile,destinationFile)
 	{
 		destinationFile.exists() && (destinationFile.lastModified()>sourceFile.lastModified())	
-	}
-
-	static def debug(msg)
-	{
-		if(showDebug)
-			println msg
-	}
-
-	static def log(msg)
-	{
-		println msg
 	}
 
 	static def errorUnknown(requestedCommand)
@@ -121,8 +98,10 @@ groovyFEWS -- The fun way to develop your FEWS configuration.
 		println "Starting autocompiler!"
 		while(true)
 		{
+			// TODO: This could be more efficient (eg in Java 1.7, using the nio package)
+			// Also, this currently doesn't notice deletions/renames in the source folders
 			compile(from,to)
-			(new Object()).sleep(1000)
+			(new Object()).sleep(2000)
 		}
 	}
 
@@ -150,26 +129,39 @@ groovyFEWS -- The fun way to develop your FEWS configuration.
 		return fn
 	}
 	
+	static def hiddenFileInPath(fn)
+	{
+		def sep = System.getProperty("file.separator")
+		if(sep=="\\")
+			sep="\\\\"
+		return fn.split(sep).any{it[0]=="."}
+	}
+	
 	static def processTree(from,to,actions)
 	{
 		def sourceDir = new File(from)
 		(new File(to)).mkdirs()
 		def sep = System.getProperty("file.separator")
 		
-		errorCount = 0
+		Actions.compileErrors = 0
 		
 		sourceDir.traverse {
 			def relativeFn = it.path.replace("$from$sep","")
 		    def destFn = "$to$sep$relativeFn"
 			def destFile = new File(destFn)
+
 			
-			if(errorCount >= errorThreshold)
+			if(Actions.compileErrors >= errorThreshold)
 			{
 				println("Too many errors: Bailling out")
 				return
 			}
-			
-			if(it.directory)
+
+			if(hiddenFileInPath(relativeFn))
+			{
+				// skip due to hidden file in path
+			}
+			else if(it.directory)
 			{
 				debug "Creating $destFn"
 				destFile.mkdirs()
@@ -190,124 +182,45 @@ groovyFEWS -- The fun way to develop your FEWS configuration.
 				{
 					def result = action(it.path,destFn)
 					if(result)
-						log "--- $relativeFn --- "						
+					{
+						log "--- $relativeFn --- "
+						if(faillingFileModificationTimeStamps.containsKey(it.path))
+							faillingFileModificationTimeStamps.remove(it.path)
+					}
+					else
+					{
+						faillingFileModificationTimeStamps[it.path]=it.lastModified()						
+					}
 					filesProcessed++
 				}
 			}
 		}
 	}
-
-	// Individual actions
-	static def copyFile = { sourceFile, destFile ->
-		Files.copy(new File(sourceFile),new File(destFile))
-		
-		true
-	}
-	
-	static def uncompileConfigurationFile = { sourceFile, destFile ->
-		def groovyBegin = 
-'''import static GroovyFewsHelpers.*
-import groovy.xml.MarkupBuilder
-
-def outputFile = new File(args[0])
-def writer = outputFile.newWriter()
-def xmlBegin = '<?xml version="1.0" encoding="UTF-8"?>'
-writer.println(xmlBegin)
-
-def xmlBuilder = new MarkupBuilder(writer)
-xmlBuilder.doubleQuotes=true
-xmlBuilder.'''
-
-		def groovyEnd = 
-'''
-writer.close()
-'''
-
-		def groovyFile = new File(destFile)
-		def output = groovyFile.newWriter()
-		output.print(groovyBegin)
-	
-		def builder = DocumentBuilderFactory.newInstance().newDocumentBuilder()
-		def inputStream = new FileInputStream(sourceFile)
-		def document = builder.parse(inputStream)
-		def converter = new DomToGroovy(new PrintWriter(output))
-
-		converter.print(document)
-		output.print(groovyEnd)			
-		output.close()
-		
-		true
-	}
-	
-	static def ignoreFile = { sourceFile, destFile ->
-		debug "Skipping $sourceFile"
-		
-		false
-	}
-	
-	static def buildShell(sourceFileFolder)
-	{
-		def baseFolder = new File(sourceDirectory)
-		
-		def shell = new GroovyShell()
-		
-		shell.classLoader.addClasspath(baseFolder.path)
-		
-		def folder = sourceFileFolder
-		while( folder != baseFolder )
-		{
-			shell.classLoader.addClasspath(folder.path)
-			folder = folder.parentFile
-		}
-		
-		shell 
-	}
-	
-	static def compileConfigurationFile = { sourceFn, destFn ->	
-		def sourceFile = new File(sourceFn)
-		def sourceFileFolder = sourceFile.parentFile
-		
-		def shell = buildShell(sourceFileFolder)
-		debug "Running $destFn with classpath=${shell.classLoader.classPath.join('\n')}"
-		
-		try
-		{
-			shell.run(sourceFile,destFn,sourceFileFolder.path)
-			if(faillingFileModificationTimeStamps.containsKey(sourceFile.path))
-				faillingFileModificationTimeStamps.remove(sourceFile.path)
-		}
-		catch(CompilationFailedException cfe)
-		{
-			println "*** Error compiling groovy code"
-			println "ERROR: $cfe.message"
-			faillingFileModificationTimeStamps[sourceFile.path]=sourceFile.lastModified()
-			errorCount++
-			return false
-		}
-		catch(Exception e)
-		{
-			println "*** Error building $destFn from $sourceFn"
-			println "ERROR: $e.message ($e.metaClass)"
-			println "LOCATION:"
-			println "* ${e.stackTrace[1..Math.min(10,e.stackTraceDepth)].join("\n * ")}"
-			faillingFileModificationTimeStamps[sourceFile.path]=sourceFile.lastModified()
-			errorCount++
-			return false			
-		}
-		true
-	}
-
+			
 	// Action sets
 	static def uncompileActions = [
-		[pattern:".xml\$", translation:".groovy", action:uncompileConfigurationFile],
-		[pattern:".cbin\$", action:ignoreFile],
-		[pattern:".", action:copyFile]
+		[pattern:".xml\$", translation:".groovy", action:Actions.uncompileConfigurationFile],
+		[pattern:".cbin\$", action:Actions.ignoreFile],
+		[pattern:".", action:Actions.copyFile]
 	]
 	
 	static def compileActions = [
-		[pattern:"^__", action:ignoreFile],
-		[pattern:".cbin\$", action:ignoreFile],
-		[pattern:".groovy\$" , translation:".xml", action:compileConfigurationFile],
-		[pattern:".", action:copyFile]
+		[pattern:"^__", action:Actions.ignoreFile],
+		[pattern:".cbin\$", action:Actions.ignoreFile],
+		[pattern:".groovy\$" , translation:".xml", action:Actions.compileConfigurationFile],
+		[pattern:".", action:Actions.copyFile]
 	]
+	
+	static showDebug=false
+
+	static def debug(msg)
+	{
+		if(showDebug)
+			println msg
+	}
+
+	static def log(msg)
+	{
+		println msg
+	}
 }
