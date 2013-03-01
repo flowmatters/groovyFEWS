@@ -4,9 +4,6 @@ class GroovyFewsHelpers
 {
 static def tsDefaults=[valueType:'scalar',timeSeriesType:'external historical',readWriteMode:'add originals',synchLevel:1]
 
-static def longRangeSimulationLength=2571
-static def forecastWarmup=90
-static def forecastPeriod=10
 static def monthsOfTheYear=[
 	'January','February','March','April','May','June',
 	'July','August','September','October','November','December']
@@ -37,14 +34,15 @@ static def buildTimeSeriesSet(args,parent)
 static def loadTable(fn)
 {
 	def f = new File(fn)
-	def lines = f.readLines()
-	
+	csvTable(f.readLines())
+}
+
+static def csvTable(lines)
+{
 	def result = []
 	lines.each{
 		result.push it.split(',')
 	}
-	result
+	result	
 }
-
-
 }
