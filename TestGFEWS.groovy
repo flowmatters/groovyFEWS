@@ -1,5 +1,6 @@
 
 import static gfews.*
+import Actions
 
 class TestGFEWS extends GroovyTestCase
 {
@@ -14,10 +15,10 @@ class TestGFEWS extends GroovyTestCase
 	
 	void testMatchAction()
 	{
-		assertEquals "Skip cbin", ignoreFile, actionFor(compileActions, "cache.cbin")
-		assertEquals "Match compile groovy", compileConfigurationFile, actionFor(compileActions, "testin.groovy")
-		assertEquals "Skip compile helper groovy", ignoreFile, actionFor(compileActions, "__testin.groovy")
-		assertEquals "Copy some other file", copyFile, actionFor(compileActions, "mapfile.shp")
+		assertEquals "Skip cbin", Actions.ignoreFile, actionFor(compileActions, "cache.cbin")
+		assertEquals "Match compile groovy", Actions.compileConfigurationFile, actionFor(compileActions, "testin.groovy")
+		assertEquals "Skip compile helper groovy", Actions.ignoreFile, actionFor(compileActions, "__testin.groovy")
+		assertEquals "Copy some other file", Actions.copyFile, actionFor(compileActions, "mapfile.shp")
 	}
 	
 	void testTranslations()
