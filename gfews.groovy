@@ -95,13 +95,23 @@ groovyFEWS -- The fun way to develop your FEWS configuration.
 
 	static def autocompile(from, to)
 	{
+		def initialDelay = 500
+		def maxDelay = 5000
+
+		def delay = initialDelay
 		println "Starting autocompiler!"
 		while(true)
 		{
+			filesProcessed = 0
 			// TODO: This could be more efficient (eg in Java 1.7, using the nio package)
 			// Also, this currently doesn't notice deletions/renames in the source folders
 			compile(from,to)
-			(new Object()).sleep(2000)
+			(new Object()).sleep(delay)
+			
+			if(filesProcessed==0)
+				delay = Math.min(maxDelay,delay*2)
+			else if(filesProcessed>=3)
+				delay = initialDelay
 		}
 	}
 
