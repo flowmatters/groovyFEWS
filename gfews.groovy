@@ -215,6 +215,8 @@ groovyFEWS -- The fun way to develop your FEWS configuration.
 	]
 	
 	static def compileActions = [
+		[pattern:".bak\$",action:Actions.ignoreFile],
+		[pattern:".~\$",action:Actions.ignoreFile],
 		[pattern:"^__", action:Actions.ignoreFile],
 		[pattern:".cbin\$", action:Actions.ignoreFile],
 		[pattern:".groovy\$" , translation:".xml", action:Actions.compileConfigurationFile],
