@@ -10,29 +10,35 @@ class Actions
 	static def destinationDirectory = ""
 	
 	static def uncompileConfigurationFile = { sourceFile, destFile ->
-		def groovyBegin = 
-	'''import static GroovyFewsHelpers.*
-	import groovy.xml.MarkupBuilder
+	def groovyBegin = 
+'''import static GroovyFewsHelpers.*
+import groovy.xml.StreamingMarkupBuilder
+import groovy.xml.XmlUtil
 
-	def outputFile = new File(args[0])
-	def writer = outputFile.newWriter()
-	def xmlBegin = '<?xml version="1.0" encoding="UTF-8"?>'
-	writer.println(xmlBegin)
+def outputFile = new File(args[0])
+def writer = outputFile.newWriter()
 
-	def xmlBuilder = new MarkupBuilder(writer)
-	xmlBuilder.doubleQuotes=true
-	xmlBuilder.'''
+def xmlBuilder = new StreamingMarkupBuilder()
+xmlBuilder.useDoubleQuotes=true
+def builderResult = xmlBuilder.bind {'''
 
-		def groovyEnd = 
-	'''
-	writer.close()
-	'''
+	def groovyEnd = 
+'''
+}
+
+writer << XmlUtil.serialize(builderResult)
+writer.close()
+'''
 
 		def groovyFile = new File(destFile)
 		def output = groovyFile.newWriter()
 		output.print(groovyBegin)
 
-		def builder = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+		def factory = DocumentBuilderFactory.newInstance()
+		factory.validating = false
+		factory.setFeature("http://apache.org/xml/features/nonvalidating/load-dtd-grammar",false)
+		factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+		def builder = factory.newDocumentBuilder()
 		def inputStream = new FileInputStream(sourceFile)
 		def document = builder.parse(inputStream)
 		def converter = new DomToGroovy(new PrintWriter(output))
